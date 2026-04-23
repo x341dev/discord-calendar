@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 import type { OAuth2Client } from 'google-auth-library';
 import { config } from '../config.ts';
 import type { AccountType, StoredTokens, GoogleTokens } from '../types.ts';
@@ -27,6 +28,8 @@ function loadTokens(): StoredTokens {
 }
 
 function saveTokens(tokens: StoredTokens): void {
+  // Asegurar que el directorio existe antes de escribir
+  mkdirSync(dirname(config.tokensPath), { recursive: true });
   writeFileSync(config.tokensPath, JSON.stringify(tokens, null, 2), 'utf-8');
 }
 
@@ -44,26 +47,41 @@ export function getAuthUrl(account: AccountType): string {
 export async function exchangeCode(code: string, account: AccountType): Promise<void> {
   const client = createOAuth2Client();
   const { tokens } = await client.getToken(code);
+
   const stored = loadTokens();
+  const existing = stored[account];
+
+  // Google solo devuelve refresh_token en el primer grant o cuando se fuerza con prompt=consent.
+  // Si no viene, preservamos el existente para no romper la autenticación anterior.
+  const refresh_token = tokens.refresh_token ?? existing?.refresh_token ?? '';
+
+  if (!refresh_token) {
+    throw new Error(
+      'Google no devolvió un refresh_token. Ve a https://myaccount.google.com/permissions, ' +
+        'revoca el acceso a esta aplicación e inténtalo de nuevo.',
+    );
+  }
+
   stored[account] = {
     access_token: tokens.access_token ?? '',
-    refresh_token: tokens.refresh_token ?? '',
+    refresh_token,
     expiry_date: tokens.expiry_date ?? 0,
     token_type: tokens.token_type ?? 'Bearer',
     scope: tokens.scope ?? '',
   };
+
   saveTokens(stored);
+  console.log(`[auth] ✅ Tokens guardados para "${account}" → ${config.tokensPath}`);
 }
 
 export function getAuthedClient(account: AccountType): OAuth2Client {
   const stored = loadTokens();
   const tokens = stored[account];
-  if (!tokens) throw new Error(`No hay tokens para la cuenta "${account}". Corre: bun run setup:auth`);
+  if (!tokens) throw new Error(`No hay tokens para la cuenta "${account}". Usa /auth`);
 
   const client = createOAuth2Client();
   client.setCredentials(tokens);
 
-  // Guarda el access_token refrescado automáticamente
   client.on('tokens', (newTokens) => {
     const current = loadTokens();
     current[account] = { ...(current[account] as GoogleTokens), ...(newTokens as Partial<GoogleTokens>) };
@@ -75,5 +93,9 @@ export function getAuthedClient(account: AccountType): OAuth2Client {
 
 export function hasTokens(account: AccountType): boolean {
   const stored = loadTokens();
-  return !!stored[account]?.refresh_token;
+  const ok = !!stored[account]?.refresh_token;
+  if (!ok) {
+    console.warn(`[auth] Sin refresh_token para "${account}" en ${config.tokensPath} (¿archivo existe? ${existsSync(config.tokensPath)})`);
+  }
+  return ok;
 }
