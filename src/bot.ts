@@ -19,10 +19,18 @@ export async function startBot(): Promise<void> {
     try {
       await handleCommand(interaction as ChatInputCommandInteraction, client);
     } catch (err) {
+      const code = (err as { code?: number }).code;
+
+      // 10062: interacción expirada (Discord no esperó los 3 s de respuesta inicial).
+      // 40060: interacción ya respondida (consecuencia habitual de un 10062 previo).
+      // En ambos casos no hay nada que hacer: la UI de Discord ya la descartó.
+      if (code === 10062 || code === 40060) {
+        console.warn(`[bot] Interacción descartada (código ${code})`);
+        return;
+      }
+
       console.error('[bot] Error en comando:', err);
       const msg = `❌ Error inesperado: ${(err as Error).message}`;
-      // Silenciar errores del fallback: si la interacción ya fue contestada
-      // (o el token de interacción expiró), no hay nada que hacer.
       if (interaction.replied || interaction.deferred) {
         await interaction.editReply(msg).catch(() => {});
       } else {
