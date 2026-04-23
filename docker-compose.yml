@@ -1,0 +1,17 @@
+services:
+  discord-calendar:
+    build: .
+    container_name: discord-calendar
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Persiste los tokens de Google entre reinicios
+      - ./data:/app/data
+    environment:
+      # Sobreescribir la ruta de tokens para que apunte al volumen
+      TOKENS_PATH: /app/data/tokens.json
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
