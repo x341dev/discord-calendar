@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { config } from '../config.ts';
 import { handleAuth } from './auth.ts';
+import { handleAuthCode } from './auth-code.ts';
 import { handleTest } from './test.ts';
 import { handleStatus } from './status.ts';
 import { handleCalendars } from './calendars.ts';
@@ -15,7 +16,7 @@ import { handleCalendars } from './calendars.ts';
 export const commands = [
   new SlashCommandBuilder()
     .setName('auth')
-    .setDescription('Autenticar una cuenta de Google')
+    .setDescription('Autenticar una cuenta de Google (abre un navegador)')
     .addStringOption((opt) =>
       opt
         .setName('cuenta')
@@ -25,6 +26,25 @@ export const commands = [
           { name: 'Personal', value: 'personal' },
           { name: 'Estudiante', value: 'student' },
         ),
+    ),
+  new SlashCommandBuilder()
+    .setName('auth-code')
+    .setDescription('Pegar el código de autorización manualmente (para Docker remoto)')
+    .addStringOption((opt) =>
+      opt
+        .setName('cuenta')
+        .setDescription('¿Qué cuenta estás autenticando?')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Personal', value: 'personal' },
+          { name: 'Estudiante', value: 'student' },
+        ),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('codigo')
+        .setDescription('El código de autorización o la URL completa del callback')
+        .setRequired(true),
     ),
   new SlashCommandBuilder()
     .setName('test')
@@ -68,14 +88,22 @@ export async function handleCommand(
 ): Promise<void> {
   // Solo responder al usuario autorizado
   if (interaction.user.id !== config.discord.userId) {
-    console.warn(`[commands] Acceso denegado. Esperado: ${config.discord.userId} | Recibido: ${interaction.user.id}`);
-    await interaction.reply({ content: 'No tienes permiso para usar este bot.', flags: MessageFlags.Ephemeral });
+    console.warn(
+      `[commands] Acceso denegado. Esperado: ${config.discord.userId} | Recibido: ${interaction.user.id}`,
+    );
+    await interaction.reply({
+      content: 'No tienes permiso para usar este bot.',
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
   switch (interaction.commandName) {
     case 'auth':
       await handleAuth(interaction);
+      break;
+    case 'auth-code':
+      await handleAuthCode(interaction);
       break;
     case 'test':
       await handleTest(interaction, client);

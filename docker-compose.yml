@@ -8,8 +8,13 @@ services:
       # Persiste los tokens de Google entre reinicios
       - ./data:/app/data
     environment:
-      # Sobreescribir la ruta de tokens para que apunte al volumen
       TOKENS_PATH: /app/data/tokens.json
+      # Descomenta si el bot corre en un servidor remoto (VPS):
+      # AUTH_REMOTE: "true"
+    ports:
+      # Exponer el puerto OAuth solo cuando el bot corre en el mismo equipo que el navegador.
+      # Si usas AUTH_REMOTE=true puedes eliminar esta línea.
+      - "3001:3001"
     logging:
       driver: json-file
       options:
